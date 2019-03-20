@@ -1,3 +1,6 @@
+.. module:: statsmodels.tsa
+   :synopsis: Time-series analysis
+
 .. currentmodule:: statsmodels.tsa
 
 
@@ -30,9 +33,11 @@ structure is within statsmodels.tsa is
    and exact maximum likelihood and conditional least-squares
  - arima_model : univariate ARMA process, estimation with conditional
    and exact maximum likelihood and conditional least-squares
- - vector_ar, var : vector autoregressive process (VAR) estimation models,
-   impulse response analysis, forecast error variance decompositions, and data
-   visualization tools
+ - statespace : Comprehensive statespace model specification and estimation. See
+   the :ref:`statespace documentation <statespace>`.
+ - vector_ar, var : vector autoregressive process (VAR) and vector error correction
+   models, estimation, impulse response analysis, forecast error variance decompositions,
+   and data visualization tools. See the :ref:`vector_ar documentation <var>`.
  - kalmanf : estimation classes for ARMA and other models with exact MLE using
    Kalman Filter
  - arma_process : properties of arma processes with given parameters, this
@@ -75,6 +80,7 @@ Descriptive Statistics and Tests
    stattools.periodogram
    stattools.adfuller
    stattools.kpss
+   stattools.coint
    stattools.bds
    stattools.q_stat
    stattools.grangercausalitytests
@@ -106,6 +112,9 @@ Autogressive Moving-Average Processes (ARMA) and Kalman Filter
 
 .. currentmodule:: statsmodels.tsa
 
+The basic ARIMA model and results classes that should be the starting point for
+for most users are:
+
 .. autosummary::
    :toctree: generated/
 
@@ -113,48 +122,34 @@ Autogressive Moving-Average Processes (ARMA) and Kalman Filter
    arima_model.ARMAResults
    arima_model.ARIMA
    arima_model.ARIMAResults
-   kalmanf.kalmanfilter.KalmanFilter
 
-Vector Autogressive Processes (VAR)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Some advanced underlying low-level classes and functions that can be used to
+compute the log-likelihood function for ARMA-type models include (note that
+these are rarely needed by end-users):
 
 .. autosummary::
    :toctree: generated/
 
-   vector_ar.var_model.VAR
-   vector_ar.var_model.VARResults
-   vector_ar.dynamic.DynamicVAR
+   kalmanf.kalmanfilter.KalmanFilter
+   innovations.arma_innovations.arma_loglike
+   innovations.arma_innovations.arma_loglikeobs
+   innovations.arma_innovations.arma_score
+   innovations.arma_innovations.arma_scoreobs
 
-.. seealso:: tutorial :ref:`VAR documentation <var>`
+
+Exponential Smoothing
+~~~~~~~~~~~~~~~~~~~~~
 
 .. currentmodule:: statsmodels.tsa
 
-Vector Autogressive Processes (VAR)
-"""""""""""""""""""""""""""""""""""
-
-Besides estimation, several process properties and additional results after
-estimation are available for vector autoregressive processes.
-
 .. autosummary::
    :toctree: generated/
 
-   vector_ar.var_model.VAR
-   vector_ar.var_model.VARProcess
-   vector_ar.var_model.VARResults
-   vector_ar.irf.IRAnalysis
-   vector_ar.var_model.FEVD
-   vector_ar.dynamic.DynamicVAR
+   holtwinters.ExponentialSmoothing
+   holtwinters.SimpleExpSmoothing
+   holtwinters.Holt
+   holtwinters.HoltWintersResults
 
-.. seealso:: tutorial :ref:`VAR documentation <var>`
-
-Regime switching models
-"""""""""""""""""""""""
-
-.. autosummary::
-   :toctree: generated/
-
-   regime_switching.markov_regression.MarkovRegression
-   regime_switching.markov_autoregression.MarkovAutoregression
 
 ARMA Process
 """"""""""""
@@ -191,6 +186,25 @@ process for given lag-polynomials.
 
 .. currentmodule:: statsmodels.tsa
 
+Statespace Models
+"""""""""""""""""
+See the :ref:`statespace documentation. <statespace>`.
+
+
+Vector ARs and Vector Error Correction Models
+"""""""""""""""""""""""""""""""""""""""""""""
+See the :ref:`vector_ar documentation. <var>`.
+
+Regime switching models
+"""""""""""""""""""""""
+
+.. autosummary::
+   :toctree: generated/
+
+   regime_switching.markov_regression.MarkovRegression
+   regime_switching.markov_autoregression.MarkovAutoregression
+
+
 Time Series Filters
 """""""""""""""""""
 
@@ -211,10 +225,11 @@ Time Series Filters
 TSA Tools
 """""""""
 
+.. currentmodule:: statsmodels.tsa
+
 .. autosummary::
    :toctree: generated/
 
-   tsatools.add_constant
    tsatools.add_trend
    tsatools.detrend
    tsatools.lagmat

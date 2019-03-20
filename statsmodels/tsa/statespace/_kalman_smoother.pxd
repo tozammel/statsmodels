@@ -56,6 +56,10 @@ cdef class sKalmanSmoother(object):
     cdef readonly np.float32_t [::1,:,:] smoothed_state_autocov
     cdef readonly np.float32_t [::1,:] tmp_autocov
 
+    cdef readonly np.float32_t [::1,:] scaled_smoothed_diffuse_estimator
+    cdef readonly np.float32_t [::1,:,:] scaled_smoothed_diffuse1_estimator_cov
+    cdef readonly np.float32_t [::1,:,:] scaled_smoothed_diffuse2_estimator_cov
+
     cdef readonly np.float32_t [:] selected_design
     cdef readonly np.float32_t [:] selected_obs_cov
 
@@ -95,6 +99,13 @@ cdef class sKalmanSmoother(object):
     cdef np.float32_t * _smoothed_state_autocov
     cdef np.float32_t * _tmp_autocov
 
+    cdef np.float32_t * _input_scaled_smoothed_diffuse_estimator
+    cdef np.float32_t * _input_scaled_smoothed_diffuse1_estimator_cov
+    cdef np.float32_t * _input_scaled_smoothed_diffuse2_estimator_cov
+    cdef np.float32_t * _scaled_smoothed_diffuse_estimator
+    cdef np.float32_t * _scaled_smoothed_diffuse1_estimator_cov
+    cdef np.float32_t * _scaled_smoothed_diffuse2_estimator_cov
+
     # Temporary
     cdef np.float32_t * _tmpL
     cdef np.float32_t * _tmpL2
@@ -129,6 +140,7 @@ cdef class sKalmanSmoother(object):
     cdef void initialize_filter_object_pointers(self)
     cdef void initialize_smoother_object_pointers(self) except *
     cdef void initialize_function_pointers(self) except *
+    cdef void _initialize_temp_pointers(self) except *
 
 # Double precision
 cdef class dKalmanSmoother(object):
@@ -155,6 +167,10 @@ cdef class dKalmanSmoother(object):
 
     cdef readonly np.float64_t [::1,:,:] smoothed_state_autocov
     cdef readonly np.float64_t [::1,:] tmp_autocov
+
+    cdef readonly np.float64_t [::1,:] scaled_smoothed_diffuse_estimator
+    cdef readonly np.float64_t [::1,:,:] scaled_smoothed_diffuse1_estimator_cov
+    cdef readonly np.float64_t [::1,:,:] scaled_smoothed_diffuse2_estimator_cov
 
     cdef readonly np.float64_t [:] selected_design
     cdef readonly np.float64_t [:] selected_obs_cov
@@ -195,6 +211,13 @@ cdef class dKalmanSmoother(object):
     cdef np.float64_t * _smoothed_state_autocov
     cdef np.float64_t * _tmp_autocov
 
+    cdef np.float64_t * _input_scaled_smoothed_diffuse_estimator
+    cdef np.float64_t * _input_scaled_smoothed_diffuse1_estimator_cov
+    cdef np.float64_t * _input_scaled_smoothed_diffuse2_estimator_cov
+    cdef np.float64_t * _scaled_smoothed_diffuse_estimator
+    cdef np.float64_t * _scaled_smoothed_diffuse1_estimator_cov
+    cdef np.float64_t * _scaled_smoothed_diffuse2_estimator_cov
+
     # Temporary
     cdef np.float64_t * _tmpL
     cdef np.float64_t * _tmpL2
@@ -229,6 +252,7 @@ cdef class dKalmanSmoother(object):
     cdef void initialize_filter_object_pointers(self)
     cdef void initialize_smoother_object_pointers(self) except *
     cdef void initialize_function_pointers(self) except *
+    cdef void _initialize_temp_pointers(self) except *
 
 # Single precision complex
 cdef class cKalmanSmoother(object):
@@ -255,6 +279,10 @@ cdef class cKalmanSmoother(object):
 
     cdef readonly np.complex64_t [::1,:,:] smoothed_state_autocov
     cdef readonly np.complex64_t [::1,:] tmp_autocov
+
+    cdef readonly np.complex64_t [::1,:] scaled_smoothed_diffuse_estimator
+    cdef readonly np.complex64_t [::1,:,:] scaled_smoothed_diffuse1_estimator_cov
+    cdef readonly np.complex64_t [::1,:,:] scaled_smoothed_diffuse2_estimator_cov
 
     cdef readonly np.complex64_t [:] selected_design
     cdef readonly np.complex64_t [:] selected_obs_cov
@@ -295,6 +323,13 @@ cdef class cKalmanSmoother(object):
     cdef np.complex64_t * _smoothed_state_autocov
     cdef np.complex64_t * _tmp_autocov
 
+    cdef np.complex64_t * _input_scaled_smoothed_diffuse_estimator
+    cdef np.complex64_t * _input_scaled_smoothed_diffuse1_estimator_cov
+    cdef np.complex64_t * _input_scaled_smoothed_diffuse2_estimator_cov
+    cdef np.complex64_t * _scaled_smoothed_diffuse_estimator
+    cdef np.complex64_t * _scaled_smoothed_diffuse1_estimator_cov
+    cdef np.complex64_t * _scaled_smoothed_diffuse2_estimator_cov
+
     # Temporary
     cdef np.complex64_t * _tmpL
     cdef np.complex64_t * _tmpL2
@@ -329,6 +364,7 @@ cdef class cKalmanSmoother(object):
     cdef void initialize_filter_object_pointers(self)
     cdef void initialize_smoother_object_pointers(self) except *
     cdef void initialize_function_pointers(self) except *
+    cdef void _initialize_temp_pointers(self) except *
 
 # Double precision complex
 cdef class zKalmanSmoother(object):
@@ -355,6 +391,10 @@ cdef class zKalmanSmoother(object):
 
     cdef readonly np.complex128_t [::1,:,:] smoothed_state_autocov
     cdef readonly np.complex128_t [::1,:] tmp_autocov
+
+    cdef readonly np.complex128_t [::1,:] scaled_smoothed_diffuse_estimator
+    cdef readonly np.complex128_t [::1,:,:] scaled_smoothed_diffuse1_estimator_cov
+    cdef readonly np.complex128_t [::1,:,:] scaled_smoothed_diffuse2_estimator_cov
 
     cdef readonly np.complex128_t [:] selected_design
     cdef readonly np.complex128_t [:] selected_obs_cov
@@ -395,6 +435,13 @@ cdef class zKalmanSmoother(object):
     cdef np.complex128_t * _smoothed_state_autocov
     cdef np.complex128_t * _tmp_autocov
 
+    cdef np.complex128_t * _input_scaled_smoothed_diffuse_estimator
+    cdef np.complex128_t * _input_scaled_smoothed_diffuse1_estimator_cov
+    cdef np.complex128_t * _input_scaled_smoothed_diffuse2_estimator_cov
+    cdef np.complex128_t * _scaled_smoothed_diffuse_estimator
+    cdef np.complex128_t * _scaled_smoothed_diffuse1_estimator_cov
+    cdef np.complex128_t * _scaled_smoothed_diffuse2_estimator_cov
+
     # Temporary
     cdef np.complex128_t * _tmpL
     cdef np.complex128_t * _tmpL2
@@ -429,3 +476,4 @@ cdef class zKalmanSmoother(object):
     cdef void initialize_filter_object_pointers(self)
     cdef void initialize_smoother_object_pointers(self) except *
     cdef void initialize_function_pointers(self) except *
+    cdef void _initialize_temp_pointers(self) except *

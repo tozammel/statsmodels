@@ -52,7 +52,7 @@ class Results(object):
 
 
 class NonlinearLS(Model):  #or subclass a model
-    '''Base class for estimation of a non-linear model with least squares
+    r'''Base class for estimation of a non-linear model with least squares
 
     This class is supposed to be subclassed, and the subclass has to provide a method
     `_predict` that defines the non-linear function `f(params) that is predicting the endogenous
@@ -214,10 +214,10 @@ class NonlinearLS(Model):  #or subclass a model
         self._results = lfit
         return lfit
 
-    def fit_minimal(self, start_value):
+    def fit_minimal(self, start_value, **kwargs):
         '''minimal fitting with no extra calculations'''
         func = self.geterrors
-        res = optimize.leastsq(func, start_value, full_output=0, **kw)
+        res = optimize.leastsq(func, start_value, full_output=0, **kwargs)
         return res
 
     def fit_random(self, ntries=10, rvs_generator=None, nparams=None):

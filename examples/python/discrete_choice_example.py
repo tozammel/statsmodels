@@ -47,7 +47,7 @@ mfx = affair_mod.get_margeff()
 print(mfx.summary())
 
 
-respondent1000 = dta.ix[1000]
+respondent1000 = dta.iloc[1000]
 print(respondent1000)
 
 
@@ -228,4 +228,3 @@ ax.plot(kde_resid.support, kde_resid.density, 'r');
 fig = plt.figure(figsize=(12,8))
 ax = fig.add_subplot(111)
 fig = sm.graphics.qqplot(resid, line='r', ax=ax)
-

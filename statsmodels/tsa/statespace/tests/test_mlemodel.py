@@ -12,21 +12,14 @@ import os
 import re
 
 import warnings
-from statsmodels.tsa.statespace import sarimax, kalman_filter, kalman_smoother
+from statsmodels.tsa.statespace import (sarimax, varmax, kalman_filter,
+                                        kalman_smoother)
 from statsmodels.tsa.statespace.mlemodel import MLEModel, MLEResultsWrapper
-from statsmodels.tsa.statespace.tools import compatibility_mode
 from statsmodels.datasets import nile
 from numpy.testing import assert_almost_equal, assert_equal, assert_allclose, assert_raises
-from nose.exc import SkipTest
-from statsmodels.tsa.statespace.tests.results import results_sarimax
+from statsmodels.tsa.statespace.tests.results import results_sarimax, results_var_misc
 
 current_path = os.path.dirname(os.path.abspath(__file__))
-
-try:
-    import matplotlib.pyplot as plt
-    have_matplotlib = True
-except ImportError:
-    have_matplotlib = False
 
 # Basic kwargs
 kwargs = {
@@ -55,7 +48,7 @@ def get_dummy_mod(fit=True, pandas=False):
             res = mod.fit(disp=-1)
     else:
         res = None
-    
+
     return mod, res
 
 
@@ -96,27 +89,24 @@ def test_wrapping():
     # initialize_known, initialize_stationary, initialize_approximate_diffuse
 
     # Initialization starts off as none
-    assert_equal(mod.initialization, None)
+    assert_equal(isinstance(mod.initialization, object), True)
 
     # Since the SARIMAX model may be fully stationary or may have diffuse
     # elements, it uses a custom initialization by default, but it can be
     # overridden by users
-    mod.initialize_state()
-    # (The default initialization in this case is known because there is a non-
-    # stationary state corresponding to the time-varying regression parameter)
-    assert_equal(mod.initialization, 'known')
+    mod.initialize_default()  # no-op here
 
     mod.initialize_approximate_diffuse(1e5)
-    assert_equal(mod.initialization, 'approximate_diffuse')
-    assert_equal(mod.ssm._initial_variance, 1e5)
+    assert_equal(mod.initialization.initialization_type, 'approximate_diffuse')
+    assert_equal(mod.initialization.approximate_diffuse_variance, 1e5)
 
     mod.initialize_known([5.], [[40]])
-    assert_equal(mod.initialization, 'known')
-    assert_equal(mod.ssm._initial_state, [5.])
-    assert_equal(mod.ssm._initial_state_cov, [[40]])
+    assert_equal(mod.initialization.initialization_type, 'known')
+    assert_equal(mod.initialization.constant, [5.])
+    assert_equal(mod.initialization.stationary_cov, [[40]])
 
     mod.initialize_stationary()
-    assert_equal(mod.initialization, 'stationary')
+    assert_equal(mod.initialization.initialization_type, 'stationary')
 
     # Test that we can use the following wrapper methods: set_filter_method,
     # set_stability_method, set_conserve_memory, set_smoother_output
@@ -138,17 +128,13 @@ def test_wrapping():
     # transferring)
 
     # Change the attributes in the model class
-    if compatibility_mode:
-        assert_raises(NotImplementedError, mod.set_filter_method, 100)
-    else:
-        mod.set_filter_method(100)
+    mod.set_filter_method(100)
     mod.set_stability_method(101)
     mod.set_conserve_memory(102)
     mod.set_smoother_output(103)
 
     # Assert that the changes have occurred in the ssm class
-    if not compatibility_mode:
-        assert_equal(mod.ssm.filter_method, 100)
+    assert_equal(mod.ssm.filter_method, 100)
     assert_equal(mod.ssm.stability_method, 101)
     assert_equal(mod.ssm.conserve_memory, 102)
     assert_equal(mod.ssm.smoother_output, 103)
@@ -157,15 +143,6 @@ def test_wrapping():
     assert_equal(kf.filter_method, kalman_filter.FILTER_CONVENTIONAL)
     assert_equal(kf.stability_method, kalman_filter.STABILITY_FORCE_SYMMETRY)
     assert_equal(kf.conserve_memory, kalman_filter.MEMORY_STORE_ALL)
-
-    # Re-initialize the filter object (this would happen automatically anytime
-    # loglike, filter, etc. were called)
-    # In this case, an error will be raised since filter_method=100 is not
-    # valid
-    # Note: this error is only raised in the compatibility case, since the
-    # newer filter logic checks for a valid filter mode at a different point
-    if compatibility_mode:
-        assert_raises(NotImplementedError, mod.ssm._initialize_filter)
 
     # Now, test the setting of the other two methods by resetting the
     # filter method to a valid value
@@ -305,6 +282,7 @@ def test_score_analytic_ar1():
     # Check the Hessian: these approximations are not very good, particularly
     # when phi is close to 0
     params = np.r_[0.5, 1.]
+
     def hessian(phi, sigma2):
         hessian = np.zeros((2,2))
         hessian[0,0] = (-phi**2 - 1) / (phi**2 - 1)**2
@@ -357,7 +335,7 @@ def test_transform():
 
     # Test direct transform, untransform
     assert_allclose(mod.transform_params([2, 3]), [2, 3])
-    assert_allclose(mod.untransform_params([2, 3]), [2, 3])    
+    assert_allclose(mod.untransform_params([2, 3]), [2, 3])
 
     # Smoke test for transformation in `filter`, `update`, `loglike`,
     # `loglikeobs`
@@ -486,19 +464,21 @@ def test_summary():
     txt = str(res.summary())
 
     # Test res.summary when the model has dates
-    assert_equal(re.search('Sample:\s+01-01-1980', txt) is not None, True)
-    assert_equal(re.search('\s+- 01-01-1984', txt) is not None, True)
+    assert_equal(re.search(r'Sample:\s+01-01-1980', txt) is not None, True)
+    assert_equal(re.search(r'\s+- 01-01-1984', txt) is not None, True)
 
     # Test res.summary when `model_name` was not provided
-    assert_equal(re.search('Model:\s+MLEModel', txt) is not None, True)
+    assert_equal(re.search(r'Model:\s+MLEModel', txt) is not None, True)
 
     # Smoke test that summary still works when diagnostic tests fail
-    res.filter_results._standardized_forecasts_error[:] = np.nan
-    res.summary()
-    res.filter_results._standardized_forecasts_error = 1
-    res.summary()
-    res.filter_results._standardized_forecasts_error = 'a'
-    res.summary()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res.filter_results._standardized_forecasts_error[:] = np.nan
+        res.summary()
+        res.filter_results._standardized_forecasts_error = 1
+        res.summary()
+        res.filter_results._standardized_forecasts_error = 'a'
+        res.summary()
 
 
 def check_endog(endog, nobs=2, k_endog=1, **kwargs):
@@ -519,6 +499,7 @@ def check_endog(endog, nobs=2, k_endog=1, **kwargs):
     assert_equal(mod.ssm.endog.base is mod.endog, True)
 
     return mod
+
 
 def test_basic_endog():
     # Test various types of basic python endog inputs (e.g. lists, scalars...)
@@ -558,6 +539,7 @@ def test_basic_endog():
     endog = (1.,2.)
     mod = check_endog(endog, **kwargs)
     mod.filter([])
+
 
 def test_numpy_endog():
     # Test various types of numpy endog inputs
@@ -651,6 +633,7 @@ def test_numpy_endog():
     mod = check_endog(endog, k_endog=2, **kwargs2)
     mod.filter([])
 
+
 def test_pandas_endog():
     # Test various types of pandas endog inputs (e.g. TimeSeries, etc.)
 
@@ -667,7 +650,7 @@ def test_pandas_endog():
     mod.filter([])
 
     # Example : pandas.Series, string datatype
-    endog = pd.Series(['a'], index=dates)
+    endog = pd.Series(['a', 'b'], index=dates)
     # raises error due to direct type casting check in Statsmodels base classes
     assert_raises(ValueError, check_endog, endog, **kwargs)
 
@@ -711,8 +694,15 @@ def test_pandas_endog():
     mod = check_endog(endog, k_endog=2, **kwargs2)
     mod.filter([])
 
+
 def test_diagnostics():
     mod, res = get_dummy_mod()
+
+    # Override the standardized forecasts errors to get more reasonable values
+    # for the tests to run (not necessary, but prevents some annoying warnings)
+    shape = res.filter_results._standardized_forecasts_error.shape
+    res.filter_results._standardized_forecasts_error = (
+        np.random.normal(size=shape))
 
     # Make sure method=None selects the appropriate test
     actual = res.test_normality(method=None)
@@ -738,8 +728,9 @@ def test_diagnostics():
     actual = res.test_heteroskedasticity(method=None, alternative='d', use_f=False)
     desired = res.test_serial_correlation(method='boxpierce')
 
+
 def test_diagnostics_nile_eviews():
-    # Test the diagnostic tests using the Nile dataset. Results are from 
+    # Test the diagnostic tests using the Nile dataset. Results are from
     # "Fitting State Space Models with EViews" (Van den Bossche 2011,
     # Journal of Statistical Software).
     # For parameter values, see Figure 2
@@ -767,8 +758,9 @@ def test_diagnostics_nile_eviews():
     actual = res.test_normality(method='jarquebera')[0, :2]
     assert_allclose(actual, [0.041686, 0.979373], atol=1e-5)
 
+
 def test_diagnostics_nile_durbinkoopman():
-    # Test the diagnostic tests using the Nile dataset. Results are from 
+    # Test the diagnostic tests using the Nile dataset. Results are from
     # Durbin and Koopman (2012); parameter values reported on page 37; test
     # statistics on page 40
     niledata = nile.data.load_pandas().data
@@ -801,6 +793,7 @@ def test_diagnostics_nile_durbinkoopman():
     actual = res.test_heteroskedasticity(method='breakvar')[0, 0]
     assert_allclose(actual, [0.61], atol=1e-2)
 
+
 def test_prediction_results():
     # Just smoke tests for the PredictionResults class, which is copied from
     # elsewhere in Statsmodels
@@ -808,3 +801,96 @@ def test_prediction_results():
     mod, res = get_dummy_mod()
     predict = res.get_prediction()
     summary_frame = predict.summary_frame()
+
+
+def test_lutkepohl_information_criteria():
+    # Setup dataset, use Lutkepohl data
+    dta = pd.DataFrame(
+        results_var_misc.lutkepohl_data, columns=['inv', 'inc', 'consump'],
+        index=pd.date_range('1960-01-01', '1982-10-01', freq='QS'))
+
+    dta['dln_inv'] = np.log(dta['inv']).diff()
+    dta['dln_inc'] = np.log(dta['inc']).diff()
+    dta['dln_consump'] = np.log(dta['consump']).diff()
+
+    endog = dta.loc['1960-04-01':'1978-10-01',
+                   ['dln_inv', 'dln_inc', 'dln_consump']]
+
+    # AR model - SARIMAX
+    # (use loglikelihood_burn=1 to mimic conditional MLE used by Stata's var
+    # command).
+    true = results_var_misc.lutkepohl_ar1_lustats
+    mod = sarimax.SARIMAX(endog['dln_inv'], order=(1, 0, 0), trend='c',
+                          loglikelihood_burn=1)
+    res = mod.filter(true['params'])
+    assert_allclose(res.llf, true['loglike'])
+    # Test the Lutkepohl ICs
+    # Note: for the Lutkepohl ICs, Stata only counts the AR coefficients as
+    # estimated parameters for the purposes of information criteria, whereas we
+    # count all parameters including scale and constant, so we need to adjust
+    # for that
+    aic = (res.info_criteria('aic', method='lutkepohl') -
+           2 * 2 / res.nobs_effective)
+    bic = (res.info_criteria('bic', method='lutkepohl') -
+           2 * np.log(res.nobs_effective) / res.nobs_effective)
+    hqic = (res.info_criteria('hqic', method='lutkepohl') -
+            2 * 2 * np.log(np.log(res.nobs_effective)) / res.nobs_effective)
+    assert_allclose(aic, true['aic'])
+    assert_allclose(bic, true['bic'])
+    assert_allclose(hqic, true['hqic'])
+
+    # Test the non-Lutkepohl ICs
+    # Note: for the non-Lutkepohl ICs, Stata does not count the scale as an
+    # estimated parameter, but does count the constant term, for the
+    # purposes of information criteria, whereas we count both, so we need to
+    # adjust for that
+    true = results_var_misc.lutkepohl_ar1
+    aic = res.aic - 2
+    bic = res.bic - np.log(res.nobs_effective)
+    assert_allclose(aic, true['estat_aic'])
+    assert_allclose(bic, true['estat_bic'])
+    aic = res.info_criteria('aic') - 2
+    bic = res.info_criteria('bic') - np.log(res.nobs_effective)
+    assert_allclose(aic, true['estat_aic'])
+    assert_allclose(bic, true['estat_bic'])
+
+    # Note: could also test the "dfk" (degree of freedom corrections), but not
+    # really necessary since they just rescale things a bit
+
+    # VAR model - VARMAX
+    # (use loglikelihood_burn=1 to mimic conditional MLE used by Stata's var
+    # command).
+    true = results_var_misc.lutkepohl_var1_lustats
+    mod = varmax.VARMAX(endog, order=(1, 0), trend='n',
+                        error_cov_type='unstructured', loglikelihood_burn=1,)
+    res = mod.filter(true['params'])
+    assert_allclose(res.llf, true['loglike'])
+
+    # Test the Lutkepohl ICs
+    # Note: for the Lutkepohl ICs, Stata only counts the AR coefficients as
+    # estimated parameters for the purposes of information criteria, whereas we
+    # count all parameters including the elements of the covariance matrix, so
+    # we need to adjust for that
+    aic = (res.info_criteria('aic', method='lutkepohl') -
+           2 * 6 / res.nobs_effective)
+    bic = (res.info_criteria('bic', method='lutkepohl') -
+           6 * np.log(res.nobs_effective) / res.nobs_effective)
+    hqic = (res.info_criteria('hqic', method='lutkepohl') -
+            2 * 6 * np.log(np.log(res.nobs_effective)) / res.nobs_effective)
+    assert_allclose(aic, true['aic'])
+    assert_allclose(bic, true['bic'])
+    assert_allclose(hqic, true['hqic'])
+
+    # Test the non-Lutkepohl ICs
+    # Note: for the non-Lutkepohl ICs, Stata does not count the elements of the
+    # covariance matrix as estimated parameters for the purposes of information
+    # criteria, whereas we count both, so we need to adjust for that
+    true = results_var_misc.lutkepohl_var1
+    aic = res.aic - 2 * 6
+    bic = res.bic - 6 * np.log(res.nobs_effective)
+    assert_allclose(aic, true['estat_aic'])
+    assert_allclose(bic, true['estat_bic'])
+    aic = res.info_criteria('aic') - 2 * 6
+    bic = res.info_criteria('bic') - 6 * np.log(res.nobs_effective)
+    assert_allclose(aic, true['estat_aic'])
+    assert_allclose(bic, true['estat_bic'])

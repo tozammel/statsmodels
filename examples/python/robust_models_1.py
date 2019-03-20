@@ -7,7 +7,6 @@ from scipy import stats
 import matplotlib.pyplot as plt
 
 import statsmodels.api as sm
-from statsmodels.compat.pandas import sort_values
 
 
 # * An M-estimator minimizes the function 
@@ -152,7 +151,7 @@ stats.norm.ppf(.75)
 print(x)
 
 
-sm.robust.scale.stand_mad(x)
+sm.robust.scale.mad(x)
 
 
 np.array([1,2,3,4,5.]).std()
@@ -186,10 +185,10 @@ loc, scale = huber(fat_tails)
 print(loc, scale)
 
 
-sm.robust.stand_mad(fat_tails)
+sm.robust.mad(fat_tails)
 
 
-sm.robust.stand_mad(fat_tails, c=stats.t(6).ppf(.75))
+sm.robust.mad(fat_tails, c=stats.t(6).ppf(.75))
 
 
 sm.robust.scale.mad(fat_tails)
@@ -201,7 +200,7 @@ from statsmodels.graphics.api import abline_plot
 from statsmodels.formula.api import ols, rlm
 
 
-prestige = sm.datasets.get_rdataset("Duncan", "car", cache=True).data
+prestige = sm.datasets.get_rdataset("Duncan", "carData", cache=True).data
 
 
 print(prestige.head(10))
@@ -210,7 +209,7 @@ print(prestige.head(10))
 fig = plt.figure(figsize=(12,12))
 ax1 = fig.add_subplot(211, xlabel='Income', ylabel='Prestige')
 ax1.scatter(prestige.income, prestige.prestige)
-xy_outlier = prestige.ix['minister'][['income','prestige']]
+xy_outlier = prestige.loc['minister'][['income','prestige']]
 ax1.annotate('Minister', xy_outlier, xy_outlier+1, fontsize=16)
 ax2 = fig.add_subplot(212, xlabel='Education',
                            ylabel='Prestige')
@@ -226,19 +225,19 @@ student = infl.summary_frame()['student_resid']
 print(student)
 
 
-print(student.ix[np.abs(student) > 2])
+print(student.loc[np.abs(student) > 2])
 
 
-print(infl.summary_frame().ix['minister'])
+print(infl.summary_frame().loc['minister'])
 
 
 sidak = ols_model.outlier_test('sidak')
-sort_values(sidak, 'unadj_p', inplace=True)
+sidak.sort_values('unadj_p', inplace=True)
 print(sidak)
 
 
 fdr = ols_model.outlier_test('fdr_bh')
-sort_values(fdr, 'unadj_p', inplace=True)
+fdr.sort_values('unadj_p', inplace=True)
 print(fdr)
 
 
@@ -270,7 +269,7 @@ ax.annotate('Red giants', xy=(3.6, 6), xytext=(3.8, 6),
             fontsize=16,
      )
 # annotate these with their index
-for i,row in dta.ix[dta['log.Te'] < 3.8].iterrows():
+for i,row in dta.loc[dta['log.Te'] < 3.8].iterrows():
     ax.annotate(i, row, row + .01, fontsize=14)
 xlim, ylim = ax.get_xlim(), ax.get_ylim()
 
@@ -296,16 +295,16 @@ infl = ols_model.get_influence()
 
 h_bar = 2*(ols_model.df_model + 1 )/ols_model.nobs
 hat_diag = infl.summary_frame()['hat_diag']
-hat_diag.ix[hat_diag > h_bar]
+hat_diag.loc[hat_diag > h_bar]
 
 
 sidak2 = ols_model.outlier_test('sidak')
-sort_values(sidak2, 'unadj_p', inplace=True)
+sidak2.sort_values('unadj_p', inplace=True)
 print(sidak2)
 
 
 fdr2 = ols_model.outlier_test('fdr_bh')
-sort_values(fdr2, 'unadj_p', inplace=True)
+fdr2.sort_values('unadj_p', inplace=True)
 print(fdr2)
 
 
@@ -383,4 +382,3 @@ beta_true
 
 
 se_loss(all_betas.mean(0) - beta_true)
-

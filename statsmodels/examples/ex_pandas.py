@@ -5,18 +5,19 @@
 
 
 from __future__ import print_function
+from statsmodels.compat.pandas import frequencies
 from statsmodels.compat.python import zip
 from datetime import datetime
 
 import numpy as np
 
-from pandas import DataFrame, Series, datetools
+from pandas import DataFrame, Series
 
 import statsmodels.api as sm
 import statsmodels.tsa.api as tsa
 
 
-data = sm.datasets.stackloss.load()
+data = sm.datasets.stackloss.load(as_pandas=False)
 X = DataFrame(data.exog, columns=data.exog_name)
 X['intercept'] = 1.
 Y = Series(data.endog)
@@ -75,13 +76,13 @@ def plot_acf_multiple(ys, lags=20):
 
 #Example TSA descriptive
 
-data = sm.datasets.macrodata.load()
+data = sm.datasets.macrodata.load(as_pandas=False)
 mdata = data.data
 df = DataFrame.from_records(mdata)
-quarter_end = datetools.BQuarterEnd()
+quarter_end = frequencies.BQuarterEnd()
 df.index = [quarter_end.rollforward(datetime(int(y), int(q) * 3, 1))
 for y, q in zip(df.pop('year'), df.pop('quarter'))]
-logged = np.log(df.ix[:, ['m1', 'realgdp', 'cpi']])
+logged = np.log(df.loc[:, ['m1', 'realgdp', 'cpi']])
 logged.plot(subplots=True)
 
 log_difference = logged.diff().dropna()

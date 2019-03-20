@@ -526,8 +526,8 @@ class Transf_gen(distributions.rv_continuous):
 
 
         self.u_args, self.u_kwargs = get_u_argskwargs(**kwargs)
-        self.kls = kls   #(self.u_args, self.u_kwargs)
-                         # possible to freeze the underlying distribution
+        self.kls = kls  #(self.u_args, self.u_kwargs)
+                        # possible to freeze the underlying distribution
 
         super(Transf_gen,self).__init__(a=a, b=b, name = name,
                                 longname = longname, extradoc = extradoc)
@@ -731,8 +731,8 @@ class TransfTwo_gen(distributions.rv_continuous):
 
 
         self.u_args, self.u_kwargs = get_u_argskwargs(**kwargs)
-        self.kls = kls   #(self.u_args, self.u_kwargs)
-                         # possible to freeze the underlying distribution
+        self.kls = kls  #(self.u_args, self.u_kwargs)
+                        # possible to freeze the underlying distribution
 
         super(TransfTwo_gen,self).__init__(a=a, b=b, name = name,
                                 shapes = kls.shapes,
@@ -1015,17 +1015,17 @@ def mvstdnormcdf(lower, upper, corrcoef, **kwds):
     Examples
     --------
 
-    >>> print mvstdnormcdf([-np.inf,-np.inf], [0.0,np.inf], 0.5)
+    >>> print(mvstdnormcdf([-np.inf,-np.inf], [0.0,np.inf], 0.5))
     0.5
     >>> corr = [[1.0, 0, 0.5],[0,1,0],[0.5,0,1]]
-    >>> print mvstdnormcdf([-np.inf,-np.inf,-100.0], [0.0,0.0,0.0], corr, abseps=1e-6)
+    >>> print(mvstdnormcdf([-np.inf,-np.inf,-100.0], [0.0,0.0,0.0], corr, abseps=1e-6))
     0.166666399198
-    >>> print mvstdnormcdf([-np.inf,-np.inf,-100.0],[0.0,0.0,0.0],corr, abseps=1e-8)
+    >>> print(mvstdnormcdf([-np.inf,-np.inf,-100.0],[0.0,0.0,0.0],corr, abseps=1e-8))
     something wrong completion with ERROR > EPS and MAXPTS function values used;
                         increase MAXPTS to decrease ERROR; 1.048330348e-006
     0.166666546218
-    >>> print mvstdnormcdf([-np.inf,-np.inf,-100.0],[0.0,0.0,0.0], corr,
-                            maxpts=100000, abseps=1e-8)
+    >>> print(mvstdnormcdf([-np.inf,-np.inf,-100.0],[0.0,0.0,0.0], corr, \
+                            maxpts=100000, abseps=1e-8))
     0.166666588293
 
     '''
@@ -1139,9 +1139,3 @@ def mvnormcdf(upper, mu, cov, lower=None,  **kwds):
     #v/np.sqrt(np.atleast_2d(np.diag(covv)))/np.sqrt(np.atleast_2d(np.diag(covv))).T
 
     return mvstdnormcdf(lower, upper, corr, **kwds)
-
-
-
-
-if __name__ == '__main__':
-    examples_transf()

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Impulse reponse-related code
 """
@@ -20,13 +21,15 @@ import statsmodels.tsa.vector_ar.util as util
 
 mat = np.array
 
+
 class BaseIRAnalysis(object):
     """
     Base class for plotting and computing IRF-related statistics, want to be
     able to handle known and estimated processes
     """
 
-    def __init__(self, model, P=None, periods=10, order=None, svar=False):
+    def __init__(self, model, P=None, periods=10, order=None, svar=False,
+                 vecm=False):
         self.model = model
         self.periods = periods
         self.neqs, self.lags, self.T = model.neqs, model.k_ar, model.nobs
@@ -62,15 +65,27 @@ class BaseIRAnalysis(object):
         else:
             self.orth_cum_effects = self.orth_irfs.cumsum(axis=0)
 
-        self.lr_effects = model.long_run_effects()
-        if svar:
-            self.svar_lr_effects = np.dot(model.long_run_effects(), P)
-        else:
-            self.orth_lr_effects = np.dot(model.long_run_effects(), P)
-
+        # long-run effects may be infinite for VECMs.
+        if not vecm:
+            self.lr_effects = model.long_run_effects()
+            if svar:
+                self.svar_lr_effects = np.dot(model.long_run_effects(), P)
+            else:
+                self.orth_lr_effects = np.dot(model.long_run_effects(), P)
 
         # auxiliary stuff
-        self._A = util.comp_matrix(model.coefs)
+        if vecm:
+            self._A = util.comp_matrix(model.var_rep)
+        else:
+            self._A = util.comp_matrix(model.coefs)
+
+    def _choose_irfs(self, orth=False, svar=False):
+        if orth:
+            return self.orth_irfs
+        elif svar:
+            return self.svar_irfs
+        else:
+            return self.irfs
 
     def cov(self, *args, **kwargs):
         raise NotImplementedError
@@ -118,15 +133,13 @@ class BaseIRAnalysis(object):
         if orth and svar:
             raise ValueError("For SVAR system, set orth=False")
 
+        irfs = self._choose_irfs(orth, svar)
         if orth:
             title = 'Impulse responses (orthogonalized)'
-            irfs = self.orth_irfs
         elif svar:
             title = 'Impulse responses (structural)'
-            irfs = self.svar_irfs
         else:
             title = 'Impulse responses'
-            irfs = self.irfs
 
         if plot_stderr == False:
             stderr = None
@@ -156,10 +169,12 @@ class BaseIRAnalysis(object):
                                            seed=seed,
                                            component=component)
 
-        plotting.irf_grid_plot(irfs, stderr, impulse, response,
-                               self.model.names, title, signif=signif,
-                               subplot_params=subplot_params,
-                               plot_params=plot_params, stderr_type=stderr_type)
+        fig = plotting.irf_grid_plot(irfs, stderr, impulse, response,
+                                     self.model.names, title, signif=signif,
+                                     subplot_params=subplot_params,
+                                     plot_params=plot_params,
+                                     stderr_type=stderr_type)
+        return fig
 
     def plot_cum_effects(self, orth=False, impulse=None, response=None,
                          signif=0.05, plot_params=None,
@@ -205,7 +220,7 @@ class BaseIRAnalysis(object):
             lr_effects = self.lr_effects
 
         if stderr_type not in ['asym', 'mc']:
-            raise TypeError
+            raise ValueError("`stderr_type` must be one of 'asym', 'mc'")
         else:
             if stderr_type == 'asym':
                 stderr = self.cum_effect_cov(orth=orth)
@@ -215,10 +230,14 @@ class BaseIRAnalysis(object):
         if not plot_stderr:
             stderr = None
 
-        plotting.irf_grid_plot(cum_effects, stderr, impulse, response,
-                               self.model.names, title, signif=signif,
-                               hlines=lr_effects, subplot_params=subplot_params,
-                               plot_params=plot_params, stderr_type=stderr_type)
+        fig = plotting.irf_grid_plot(cum_effects, stderr, impulse, response,
+                                     self.model.names, title, signif=signif,
+                                     hlines=lr_effects,
+                                     subplot_params=subplot_params,
+                                     plot_params=plot_params,
+                                     stderr_type=stderr_type)
+        return fig
+
 
 class IRAnalysis(BaseIRAnalysis):
     """
@@ -231,13 +250,17 @@ class IRAnalysis(BaseIRAnalysis):
 
     Notes
     -----
-    Using Lutkepohl (2005) notation
+    Using Lütkepohl (2005) notation
     """
-    def __init__(self, model, P=None, periods=10, order=None, svar=False):
+    def __init__(self, model, P=None, periods=10, order=None, svar=False,
+                 vecm=False):
         BaseIRAnalysis.__init__(self, model, P=P, periods=periods,
-                                order=order, svar=svar)
+                                order=order, svar=svar, vecm=vecm)
 
-        self.cov_a = model._cov_alpha
+        if vecm:
+            self.cov_a = model.cov_var_repr
+        else:
+            self.cov_a = model._cov_alpha
         self.cov_sig = model._cov_sigma
 
         # memoize dict for G matrix function
@@ -249,7 +272,7 @@ class IRAnalysis(BaseIRAnalysis):
 
         Notes
         -----
-        Lutkepohl eq 3.7.5
+        Lütkepohl eq 3.7.5
 
         Returns
         -------
@@ -280,6 +303,7 @@ class IRAnalysis(BaseIRAnalysis):
             return model.irf_errband_mc(orth=orth, repl=repl, T=periods,
                                         signif=signif, seed=seed,
                                         burn=burn, cum=False)
+
     def err_band_sz1(self, orth=False, svar=False, repl=1000,
                      signif=0.05, seed=None, burn=100, component=None):
         """
@@ -311,12 +335,7 @@ class IRAnalysis(BaseIRAnalysis):
 
         model = self.model
         periods = self.periods
-        if orth:
-            irfs = self.orth_irfs
-        elif svar:
-            irfs = self.svar_irfs
-        else:
-            irfs = self.irfs
+        irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
         irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
                                    burn=100)
@@ -340,10 +359,9 @@ class IRAnalysis(BaseIRAnalysis):
                 lower[1:,i,j] = irfs[1:,i,j] + W[i,j,:,k[i,j]]*q*np.sqrt(eigva[i,j,k[i,j]])
                 upper[1:,i,j] = irfs[1:,i,j] - W[i,j,:,k[i,j]]*q*np.sqrt(eigva[i,j,k[i,j]])
 
-
         return lower, upper
 
-    def err_band_sz2(self, orth=False, repl=1000, signif=0.05,
+    def err_band_sz2(self, orth=False, svar=False, repl=1000, signif=0.05,
                      seed=None, burn=100, component=None):
         """
         IRF Sims-Zha error band method 2.
@@ -374,12 +392,7 @@ class IRAnalysis(BaseIRAnalysis):
         """
         model = self.model
         periods = self.periods
-        if orth:
-            irfs = self.orth_irfs
-        elif svar:
-            irfs = self.svar_irfs
-        else:
-            irfs = self.irfs
+        irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
         irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
                                    burn=100)
@@ -412,7 +425,7 @@ class IRAnalysis(BaseIRAnalysis):
 
         return lower, upper
 
-    def err_band_sz3(self, orth=False, repl=1000, signif=0.05,
+    def err_band_sz3(self, orth=False, svar=False, repl=1000, signif=0.05,
                      seed=None, burn=100, component=None):
         """
         IRF Sims-Zha error band method 3. Does not assume symmetric error bands around mean.
@@ -442,12 +455,7 @@ class IRAnalysis(BaseIRAnalysis):
 
         model = self.model
         periods = self.periods
-        if orth:
-            irfs = self.orth_irfs
-        elif svar:
-            irfs = self.svar_irfs
-        else:
-            irfs = self.irfs
+        irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
         irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
                                    burn=100)
@@ -689,5 +697,3 @@ class IRAnalysis(BaseIRAnalysis):
 
     def fevd_table(self):
         pass
-
-

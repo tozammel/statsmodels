@@ -22,7 +22,7 @@ How does statsmodels handle missing data?
 
 Missing data can be handled via the ``missing`` keyword argument. Every model takes this keyword. You can find more information in the docstring of :class:`statsmodels.base.Model <base.model.Model>`. 
 
-.. `Model class <http://www.statsmodels.org/devel/dev/generated/statsmodels.base.model.Model.html#statsmodels.base.model.Model>`_.
+.. `Model class <https://www.statsmodels.org/devel/dev/generated/statsmodels.base.model.Model.html#statsmodels.base.model.Model>`_.
 
 .. _build-faq:
 
@@ -38,4 +38,4 @@ If you're on Python 3.4, you *must* use Cython 0.20.1. If you're still having pr
 What if my question isn't answered here?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You may find answers for questions that have not yet been added here on GitHub under the `FAQ issues tag <https://github.com/statsmodels/statsmodels/issues?labels=FAQ&page=1&state=open>`_. If not, please ask your question on stackoverflow using the `statsmodels tag <https://stackoverflow.com/questions/tagged/statsmodels>`_ or on the `mailing list <https://groups.google.com/forum/#!forum/pystatsmodels>`_.
+You may find answers for questions that have not yet been added here on GitHub under the `FAQ issues tag <https://github.com/statsmodels/statsmodels/labels/FAQ>`_. If not, please ask your question on stackoverflow using the `statsmodels tag <https://stackoverflow.com/questions/tagged/statsmodels>`_ or on the `mailing list <https://groups.google.com/forum/#!forum/pystatsmodels>`_.

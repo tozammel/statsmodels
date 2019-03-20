@@ -1,3 +1,6 @@
+.. module:: statsmodels.tsa.statespace
+   :synopsis: Statespace models for time-series analysis
+
 .. currentmodule:: statsmodels.tsa.statespace
 
 
@@ -52,8 +55,7 @@ This generic form encapsulates many of the most popular linear time series
 models (see below) and is very flexible, allowing estimation with missing
 observations, forecasting, impulse response functions, and much more.
 
-Example: AR(2) model
-^^^^^^^^^^^^^^^^^^^^
+**Example: AR(2) model**
 
 An autoregressive model is a good introductory example to putting models in
 state space form. Recall that an AR(2) model is often written as:
@@ -114,7 +116,7 @@ arbitrary trend polynomials.
    sarimax.SARIMAXResults
 
 For an example of the use of this model, see the
-`SARIMAX example notebook <examples/notebooks/generated/statespace_sarimax_stata_notebook.html>`__
+`SARIMAX example notebook <examples/notebooks/generated/statespace_sarimax_stata.html>`__
 or the very brief code snippet below:
 
 
@@ -165,7 +167,7 @@ The `UnobservedComponents` class is another example of a statespace model.
    structural.UnobservedComponents
    structural.UnobservedComponentsResults
 
-For examples of the use of this model, see the `example notebook <examples/notebooks/generated/statespace_structural_harvey_jaeger_notebook.html>`__ or a notebook on using the unobserved components model to `decompose a time series into a trend and cycle <examples/notebooks/generated/statespace_cycles_notebook.html>`__ or the very brief code snippet below:
+For examples of the use of this model, see the `example notebook <examples/notebooks/generated/statespace_structural_harvey_jaeger.html>`__ or a notebook on using the unobserved components model to `decompose a time series into a trend and cycle <examples/notebooks/generated/statespace_cycles.html>`__ or the very brief code snippet below:
 
 .. code-block:: python
 
@@ -212,7 +214,7 @@ The `VARMAX` class is an example of a multivariate statespace model.
    varmax.VARMAX
    varmax.VARMAXResults
 
-For an example of the use of this model, see the `VARMAX example notebook <examples/notebooks/generated/statespace_varmax_notebook.html>`__ or the very brief code snippet below:
+For an example of the use of this model, see the `VARMAX example notebook <examples/notebooks/generated/statespace_varmax.html>`__ or the very brief code snippet below:
 
 .. code-block:: python
 
@@ -248,7 +250,7 @@ model.
    dynamic_factor.DynamicFactor
    dynamic_factor.DynamicFactorResults
 
-For an example of the use of this model, see the `Dynamic Factor example notebook <examples/notebooks/generated/statespace_dfm_coincident_notebook.html>`__ or the very brief code snippet below:
+For an example of the use of this model, see the `Dynamic Factor example notebook <examples/notebooks/generated/statespace_dfm_coincident.html>`__ or the very brief code snippet below:
 
 .. code-block:: python
 
@@ -288,7 +290,7 @@ likelihood fitting functionality for estimation and results output.
    mlemodel.MLEResults
 
 For a basic example demonstrating creating and estimating a custom state space
-model, see the `Local Linear Trend example notebook <examples/notebooks/generated/statespace_local_linear_trend_notebook.html>`__.
+model, see the `Local Linear Trend example notebook <examples/notebooks/generated/statespace_local_linear_trend.html>`__.
 For a more sophisticated example, see the source code for the `SARIMAX` and
 `SARIMAXResults` classes, which are built by extending `MLEModel` and
 `MLEResults`.
@@ -429,6 +431,7 @@ additional prediction or forecasting results, including confidence intervals.
 
    kalman_filter.KalmanFilter
    kalman_filter.FilterResults
+   kalman_filter.PredictionResults
 
 The `KalmanSmoother` class is a subclass of `KalmanFilter` that provides
 smoothing capabilities. Once the state space representation matrices have been

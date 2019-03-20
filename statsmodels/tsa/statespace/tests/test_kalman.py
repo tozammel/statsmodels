@@ -1,5 +1,5 @@
 """
-Tests for _statespace module
+Tests for _representation and _kalman_filter modules
 
 Author: Chad Fulton
 License: Simplified-BSD
@@ -17,37 +17,31 @@ Time Series Analysis.
 Princeton, N.J.: Princeton University Press.
 """
 from __future__ import division, absolute_import, print_function
+from statsmodels.compat import cPickle
+
+from distutils.version import LooseVersion
+import copy
 
 import numpy as np
 import pandas as pd
 import os
+import pytest
 
-try:
-    from scipy.linalg.blas import find_best_blas_type
-except ImportError:
-    # Shim for SciPy 0.11, derived from tag=0.11 scipy.linalg.blas
-    _type_conv = {'f': 's', 'd': 'd', 'F': 'c', 'D': 'z', 'G': 'z'}
-
-    def find_best_blas_type(arrays):
-        dtype, index = max(
-            [(ar.dtype, i) for i, ar in enumerate(arrays)])
-        prefix = _type_conv.get(dtype.char, 'd')
-        return (prefix, dtype, None)
-
-
+from scipy.linalg.blas import find_best_blas_type
+from scipy.linalg import solve_discrete_lyapunov
+from statsmodels.tsa.statespace.mlemodel import MLEModel
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.statespace import _statespace as ss
+from statsmodels.tsa.statespace import _representation, _kalman_filter
 from .results import results_kalman_filter
 from numpy.testing import assert_almost_equal, assert_allclose
-from nose.exc import SkipTest
 
 prefix_statespace_map = {
-    's': ss.sStatespace, 'd': ss.dStatespace,
-    'c': ss.cStatespace, 'z': ss.zStatespace
+    's': _representation.sStatespace, 'd': _representation.dStatespace,
+    'c': _representation.cStatespace, 'z': _representation.zStatespace
 }
 prefix_kalman_filter_map = {
-    's': ss.sKalmanFilter, 'd': ss.dKalmanFilter,
-    'c': ss.cKalmanFilter, 'z': ss.zKalmanFilter
+    's': _kalman_filter.sKalmanFilter, 'd': _kalman_filter.dKalmanFilter,
+    'c': _kalman_filter.cKalmanFilter, 'z': _kalman_filter.zKalmanFilter
 }
 
 current_path = os.path.dirname(os.path.abspath(__file__))
@@ -189,6 +183,31 @@ class Clark1987(object):
             self.true_states.iloc[:, 2], 4
         )
 
+    def test_pickled_filter(self):
+        pickled = cPickle.loads(cPickle.dumps(self.filter))
+        #  Run the filters
+        self.filter()
+        pickled()
+
+        assert id(filter) != id(pickled)
+        assert_allclose(np.array(self.filter.filtered_state),
+                        np.array(pickled.filtered_state))
+        assert_allclose(np.array(self.filter.loglikelihood),
+                        np.array(pickled.loglikelihood))
+
+    def test_copied_filter(self):
+        copied = copy.deepcopy(self.filter)
+        #  Run the filters
+        self.filter()
+        copied()
+
+        assert id(filter) != id(copied)
+        assert_allclose(np.array(self.filter.filtered_state),
+                        np.array(copied.filtered_state))
+
+        assert_allclose(np.array(self.filter.loglikelihood),
+                        np.array(copied.loglikelihood))
+
 
 class TestClark1987Single(Clark1987):
     """
@@ -196,7 +215,7 @@ class TestClark1987Single(Clark1987):
     """
     @classmethod
     def setup_class(cls):
-        raise SkipTest('Not implemented')
+        pytest.skip('Not implemented')
         super(TestClark1987Single, cls).setup_class(
             dtype=np.float32, conserve_memory=0
         )
@@ -247,7 +266,7 @@ class TestClark1987SingleComplex(Clark1987):
     """
     @classmethod
     def setup_class(cls):
-        raise SkipTest('Not implemented')
+        pytest.skip('Not implemented')
         super(TestClark1987SingleComplex, cls).setup_class(
             dtype=np.complex64, conserve_memory=0
         )
@@ -704,3 +723,80 @@ class TestClark1989ConserveAll(Clark1989):
             self.result['state'][5][-1],
             self.true_states.iloc[end-1, 3], 4
         )
+
+
+def check_stationary_initialization_1dim(dtype=float):
+    endog = np.zeros(10, dtype=dtype)
+
+    # 1-dimensional example
+    mod = MLEModel(endog, k_states=1, k_posdef=1)
+    mod.ssm.initialize_stationary()
+    intercept = np.array([2.3], dtype=dtype)
+    phi = np.diag([0.9]).astype(dtype)
+    sigma2 = np.diag([1.3]).astype(dtype)
+
+    mod['state_intercept'] = intercept
+    mod['transition'] = phi
+    mod['selection'] = np.eye(1).astype(dtype)
+    mod['state_cov'] = sigma2
+
+    mod.ssm._initialize_filter()
+    mod.ssm._initialize_state()
+
+    _statespace = mod.ssm._statespace
+    initial_state = np.array(_statespace.initial_state)
+    initial_state_cov = np.array(_statespace.initial_state_cov)
+    # precision reductions only required for float complex case
+
+    # mean = intercept + phi * mean
+    # intercept = (1 - phi) * mean
+    # mean = intercept / (1 - phi)
+    assert_allclose(initial_state, intercept / (1 - phi[0, 0]))
+    desired = np.linalg.inv(np.eye(1) - phi).dot(intercept)
+    assert_allclose(initial_state, desired)
+    # var = phi**2 var + sigma2
+    # var = sigma2 / (1 - phi**2)
+    assert_allclose(initial_state_cov, sigma2 / (1 - phi**2))
+    assert_allclose(initial_state_cov, solve_discrete_lyapunov(phi, sigma2))
+
+
+def check_stationary_initialization_2dim(dtype=float):
+    endog = np.zeros(10, dtype=dtype)
+    # 2-dimensional example
+    mod = MLEModel(endog, k_states=2, k_posdef=2)
+    mod.ssm.initialize_stationary()
+    intercept = np.array([2.3, -10.2], dtype=dtype)
+    phi = np.array([[0.8, 0.1],
+                    [-0.2, 0.7]], dtype=dtype)
+    sigma2 = np.array([[1.4, -0.2],
+                       [-0.2, 4.5]], dtype=dtype)
+
+    mod['state_intercept'] = intercept
+    mod['transition'] = phi
+    mod['selection'] = np.eye(2).astype(dtype)
+    mod['state_cov'] = sigma2
+
+    mod.ssm._initialize_filter()
+    mod.ssm._initialize_state()
+
+    _statespace = mod.ssm._statespace
+    initial_state = np.array(_statespace.initial_state)
+    initial_state_cov = np.array(_statespace.initial_state_cov)
+
+    desired = np.linalg.solve(np.eye(2).astype(dtype) - phi, intercept)
+    assert_allclose(initial_state, desired)
+    desired = solve_discrete_lyapunov(phi, sigma2)
+    # precision reductions only required for single precision float / complex
+    assert_allclose(initial_state_cov, desired, atol=1e-5)
+
+
+def test_stationary_initialization():
+    check_stationary_initialization_1dim(np.float32)
+    check_stationary_initialization_1dim(np.float64)
+    check_stationary_initialization_1dim(np.complex64)
+    check_stationary_initialization_1dim(np.complex128)
+
+    check_stationary_initialization_2dim(np.float32)
+    check_stationary_initialization_2dim(np.float64)
+    check_stationary_initialization_2dim(np.complex64)
+    check_stationary_initialization_2dim(np.complex128)

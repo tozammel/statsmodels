@@ -15,6 +15,7 @@ In the case of linear models with no interactions involving the
 mediator, the results should be similar or identical to the earlier
 Barron-Kenny approach.
 """
+from statsmodels.compat.python import string_types
 
 import numpy as np
 import pandas as pd
@@ -73,7 +74,7 @@ class Mediation(object):
     >>> import statsmodels.genmod.families.links as links
     >>> probit = links.probit
     >>> outcome_model = sm.GLM.from_formula("cong_mesg ~ emo + treat + age + educ + gender + income",
-    ...                                     data, family=sm.families.Binomial(link=probit))
+    ...                                     data, family=sm.families.Binomial(link=probit()))
     >>> mediator_model = sm.OLS.from_formula("emo ~ treat + age + educ + gender + income", data)
     >>> med = Mediation(outcome_model, mediator_model, "treat", "emo").fit()
     >>> med.summary()
@@ -88,7 +89,7 @@ class Mediation(object):
     >>> outcome_exog = patsy.dmatrix("emo + treat + age + educ + gender + income", data,
     ...                              return_type='dataframe')
     >>> probit = sm.families.links.probit
-    >>> outcome_model = sm.GLM(outcome, outcome_exog, family=sm.families.Binomial(link=probit))
+    >>> outcome_model = sm.GLM(outcome, outcome_exog, family=sm.families.Binomial(link=probit()))
     >>> mediator = np.asarray(data["emo"])
     >>> mediator_exog = patsy.dmatrix("treat + age + educ + gender + income", data,
     ...                               return_type='dataframe')
@@ -163,7 +164,7 @@ class Mediation(object):
             return maybe_name_or_idx(self.mediator, mod)[1]
 
         exp = self.exposure
-        exp_is_2 = ((len(exp) == 2) and (type(exp) != type('')))
+        exp_is_2 = ((len(exp) == 2) and not isinstance(exp, string_types))
 
         if exp_is_2:
             if model == 'outcome':
@@ -386,7 +387,7 @@ class MediationResults(object):
                                  self.prop_med_avg]):
 
             if ((vec is self.prop_med_ctrl) or (vec is self.prop_med_tx) or
-                (vec is self.prop_med_avg)):
+                    (vec is self.prop_med_avg)):
                 smry.iloc[i, 0] = np.median(vec)
             else:
                 smry.iloc[i, 0] = vec.mean()

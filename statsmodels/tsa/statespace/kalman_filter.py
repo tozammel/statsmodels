@@ -7,6 +7,7 @@ License: Simplified-BSD
 from __future__ import division, absolute_import, print_function
 
 from warnings import warn
+from contextlib import contextmanager
 
 import numpy as np
 from .representation import OptionWrapper, Representation, FrozenRepresentation
@@ -24,6 +25,7 @@ FILTER_UNIVARIATE = 0x10       # ibid., Chapter 6.4
 FILTER_COLLAPSED = 0x20        # ibid., Chapter 6.5
 FILTER_EXTENDED = 0x40         # ibid., Chapter 10.2
 FILTER_UNSCENTED = 0x80        # ibid., Chapter 10.3
+FILTER_CONCENTRATED = 0x100    # Harvey (1989), Chapter 3.4
 
 INVERT_UNIVARIATE = 0x01
 SOLVE_LU = 0x02
@@ -64,7 +66,7 @@ class KalmanFilter(Representation):
         The dimension of the unobserved state process.
     k_posdef : int, optional
         The dimension of a guaranteed positive definite covariance matrix
-        describing the shocks in the measurement equation. Must be less than
+        describing the shocks in the transition equation. Must be less than
         or equal to `k_states`. Default is `k_states`.
     loglikelihood_burn : int, optional
         The number of initial periods during which the loglikelihood is not
@@ -134,7 +136,7 @@ class KalmanFilter(Representation):
     filter_methods = [
         'filter_conventional', 'filter_exact_initial', 'filter_augmented',
         'filter_square_root', 'filter_univariate', 'filter_collapsed',
-        'filter_extended', 'filter_unscented'
+        'filter_extended', 'filter_unscented', 'filter_concentrated'
     ]
 
     filter_conventional = OptionWrapper('filter_method', FILTER_CONVENTIONAL)
@@ -168,6 +170,10 @@ class KalmanFilter(Representation):
     filter_unscented = OptionWrapper('filter_method', FILTER_UNSCENTED)
     """
     (bool) Flag for unscented Kalman filtering. Not implemented.
+    """
+    filter_concentrated = OptionWrapper('filter_method', FILTER_CONCENTRATED)
+    """
+    (bool) Flag for Kalman filtering with concentrated log-likelihood.
     """
 
     inversion_methods = [
@@ -315,6 +321,18 @@ class KalmanFilter(Representation):
 
         self.tolerance = tolerance
 
+        # Internal flags
+        # The _scale internal flag is used because we may want to
+        # use a fixed scale, in which case we want the flag to the Cython
+        # Kalman filter to indicate that the scale should not be concentrated
+        # out, so that self.filter_concentrated = False, but we still want to
+        # alert the results object that we are viewing the model as one in
+        # which the scale had been concentrated out for e.g. degree of freedom
+        # computations.
+        # This value should always be None, except within the fixed_scale
+        # context, and should not be modified by users or anywhere else.
+        self._scale = None
+
     @property
     def _kalman_filter(self):
         prefix = self.prefix
@@ -414,6 +432,9 @@ class KalmanFilter(Representation):
         FILTER_COLLAPSED = 0x20
             Collapsed approach to Kalman filtering. Will be used *in addition*
             to conventional or univariate filtering.
+        FILTER_CONCENTRATED = 0x20
+            Use the concentrated log-likelihood function. Will be used
+            *in addition* to the other options.
 
         Note that only the first method is available if using a Scipy version
         older than 0.16.
@@ -434,26 +455,26 @@ class KalmanFilter(Representation):
         Examples
         --------
         >>> mod = sm.tsa.statespace.SARIMAX(range(10))
-        >>> mod.filter_method
+        >>> mod.ssm.filter_method
         1
-        >>> mod.filter_conventional
+        >>> mod.ssm.filter_conventional
         True
-        >>> mod.filter_univariate = True
-        >>> mod.filter_method
+        >>> mod.ssm.filter_univariate = True
+        >>> mod.ssm.filter_method
         17
-        >>> mod.set_filter_method(filter_univariate=False,
-                                  filter_collapsed=True)
-        >>> mod.filter_method
+        >>> mod.ssm.set_filter_method(filter_univariate=False,
+        ...                           filter_collapsed=True)
+        >>> mod.ssm.filter_method
         33
-        >>> mod.set_filter_method(filter_method=1)
-        >>> mod.filter_conventional
+        >>> mod.ssm.set_filter_method(filter_method=1)
+        >>> mod.ssm.filter_conventional
         True
-        >>> mod.filter_univariate
+        >>> mod.ssm.filter_univariate
         False
-        >>> mod.filter_collapsed
+        >>> mod.ssm.filter_collapsed
         False
-        >>> mod.filter_univariate = True
-        >>> mod.filter_method
+        >>> mod.ssm.filter_univariate = True
+        >>> mod.ssm.filter_method
         17
         """
         if filter_method is not None:
@@ -461,11 +482,6 @@ class KalmanFilter(Representation):
         for name in KalmanFilter.filter_methods:
             if name in kwargs:
                 setattr(self, name, kwargs[name])
-
-        if self._compatibility_mode and not self.filter_method == 1:
-            raise NotImplementedError('Only conventional Kalman filtering'
-                                      ' is available. Consider updating'
-                                      ' dependencies for more options.')
 
     def set_inversion_method(self, inversion_method=None, **kwargs):
         r"""
@@ -531,20 +547,20 @@ class KalmanFilter(Representation):
         Examples
         --------
         >>> mod = sm.tsa.statespace.SARIMAX(range(10))
-        >>> mod.inversion_method
+        >>> mod.ssm.inversion_method
         1
-        >>> mod.solve_cholesky
+        >>> mod.ssm.solve_cholesky
         True
-        >>> mod.invert_univariate
+        >>> mod.ssm.invert_univariate
         True
-        >>> mod.invert_lu
+        >>> mod.ssm.invert_lu
         False
-        >>> mod.invert_univariate = False
-        >>> mod.inversion_method
+        >>> mod.ssm.invert_univariate = False
+        >>> mod.ssm.inversion_method
         8
-        >>> mod.set_inversion_method(solve_cholesky=False,
-                                     invert_cholesky=True)
-        >>> mod.inversion_method
+        >>> mod.ssm.set_inversion_method(solve_cholesky=False,
+        ...                              invert_cholesky=True)
+        >>> mod.ssm.inversion_method
         16
         """
         if inversion_method is not None:
@@ -597,12 +613,12 @@ class KalmanFilter(Representation):
         Examples
         --------
         >>> mod = sm.tsa.statespace.SARIMAX(range(10))
-        >>> mod.stability_method
+        >>> mod.ssm.stability_method
         1
-        >>> mod.stability_force_symmetry
+        >>> mod.ssm.stability_force_symmetry
         True
-        >>> mod.stability_force_symmetry = False
-        >>> mod.stability_method
+        >>> mod.ssm.stability_force_symmetry = False
+        >>> mod.ssm.stability_method
         0
         """
         if stability_method is not None:
@@ -680,16 +696,16 @@ class KalmanFilter(Representation):
         Examples
         --------
         >>> mod = sm.tsa.statespace.SARIMAX(range(10))
-        >>> mod.conserve_memory
+        >>> mod.ssm..conserve_memory
         0
-        >>> mod.memory_no_predicted
+        >>> mod.ssm.memory_no_predicted
         False
-        >>> mod.memory_no_predicted = True
-        >>> mod.conserve_memory
+        >>> mod.ssm.memory_no_predicted = True
+        >>> mod.ssm.conserve_memory
         2
-        >>> mod.set_conserve_memory(memory_no_filtered=True,
-                                    memory_no_forecast=True)
-        >>> mod.conserve_memory
+        >>> mod.ssm.set_conserve_memory(memory_no_filtered=True,
+        ...                             memory_no_forecast=True)
+        >>> mod.ssm.conserve_memory
         7
         """
         if conserve_memory is not None:
@@ -723,12 +739,46 @@ class KalmanFilter(Representation):
         if 'timing_init_filtered' in kwargs:
             self.filter_timing = int(kwargs['timing_init_filtered'])
 
-        if (self._compatibility_mode and
-                self.filter_timing == TIMING_INIT_FILTERED):
-            raise NotImplementedError('Only "predicted" Kalman filter'
-                                      ' timing is available. Consider'
-                                      ' updating dependencies for more'
-                                      ' options.')
+    @contextmanager
+    def fixed_scale(self, scale):
+        """
+        Context manager for fixing the scale when FILTER_CONCENTRATED is set
+
+        Parameters
+        ----------
+        scale : numeric
+            Scale of the model.
+
+        Notes
+        -----
+        This a no-op if scale is None.
+
+        This context manager is most useful in models which are explicitly
+        concentrating out the scale, so that the set of parameters they are
+        estimating does not include the scale.
+
+        """
+        # If a scale was provided, use it and do not concentrate it out of the
+        # loglikelihood
+        if scale is not None and scale != 1:
+            if not self.filter_concentrated:
+                raise ValueError('Cannot provide scale if filter method does'
+                                 ' not include FILTER_CONCENTRATED.')
+            self.filter_concentrated = False
+            self._scale = scale
+            obs_cov = self['obs_cov']
+            state_cov = self['state_cov']
+            self['obs_cov'] = scale * obs_cov
+            self['state_cov'] = scale * state_cov
+        try:
+            yield
+        finally:
+            # If a scale was provided, reset the model
+            if scale is not None and scale != 1:
+                self['state_cov'] = state_cov
+                self['obs_cov'] = obs_cov
+                self.filter_concentrated = True
+                self._scale = None
 
     def _filter(self, filter_method=None, inversion_method=None,
                 stability_method=None, conserve_memory=None,
@@ -823,7 +873,32 @@ class KalmanFilter(Representation):
         kfilter = self._filter(**kwargs)
         loglikelihood_burn = kwargs.get('loglikelihood_burn',
                                         self.loglikelihood_burn)
-        return np.sum(kfilter.loglikelihood[loglikelihood_burn:])
+        loglike = np.sum(kfilter.loglikelihood[loglikelihood_burn:])
+
+        # Need to modify the computed log-likelihood to incorporate the
+        # MLE scale.
+        if self.filter_method & FILTER_CONCENTRATED:
+            d = max(loglikelihood_burn, kfilter.nobs_diffuse)
+            nobs_k_endog = np.sum(
+                self.k_endog -
+                np.array(self._statespace.nmissing)[d:])
+
+            # In the univariate case, we need to subtract observations
+            # associated with a singular forecast error covariance matrix
+            nobs_k_endog -= kfilter.nobs_kendog_univariate_singular
+
+            scale = np.sum(kfilter.scale[d:]) / nobs_k_endog
+
+            loglike += -0.5 * nobs_k_endog
+
+            # Now need to modify this for diffuse initialization, since for
+            # diffuse periods we only need to add in the scale value part if
+            # the diffuse forecast error covariance matrix element was singular
+            if kfilter.nobs_diffuse > 0:
+                nobs_k_endog -= kfilter.nobs_kendog_diffuse_nonsingular
+
+            loglike += -0.5 * nobs_k_endog * np.log(scale)
+        return loglike
 
     def loglikeobs(self, **kwargs):
         r"""
@@ -849,13 +924,49 @@ class KalmanFilter(Representation):
         if self.memory_no_likelihood:
             raise RuntimeError('Cannot compute loglikelihood if'
                                ' MEMORY_NO_LIKELIHOOD option is selected.')
-        kwargs['conserve_memory'] = MEMORY_CONSERVE ^ MEMORY_NO_LIKELIHOOD
+        if not self.filter_method & FILTER_CONCENTRATED:
+            kwargs['conserve_memory'] = MEMORY_CONSERVE ^ MEMORY_NO_LIKELIHOOD
         kfilter = self._filter(**kwargs)
         llf_obs = np.array(kfilter.loglikelihood, copy=True)
-
-        # Set any burned observations to have zero likelihood
         loglikelihood_burn = kwargs.get('loglikelihood_burn',
                                         self.loglikelihood_burn)
+
+        # If the scale was concentrated out of the log-likelihood function,
+        # then the llf_obs above is:
+        # -0.5 * k_endog * log 2 * pi - 0.5 * log |F_t|
+        # and we need to add in the effect of the scale:
+        # -0.5 * k_endog * log scale - 0.5 v' F_t^{-1} v / scale
+        # and note that v' F_t^{-1} is in the _kalman_filter.scale array
+        # Also note that we need to adjust the nobs and k_endog in both the
+        # denominator of the scale computation and in the llf_obs adjustment
+        # to take into account missing values.
+        if self.filter_method & FILTER_CONCENTRATED:
+            d = max(loglikelihood_burn, kfilter.nobs_diffuse)
+            nmissing = np.array(self._statespace.nmissing)
+            nobs_k_endog = np.sum(self.k_endog - nmissing[d:])
+
+            # In the univariate case, we need to subtract observations
+            # associated with a singular forecast error covariance matrix
+            nobs_k_endog -= kfilter.nobs_kendog_univariate_singular
+
+            scale = np.sum(kfilter.scale[d:]) / nobs_k_endog
+
+            # Need to modify this for diffuse initialization, since for
+            # diffuse periods we only need to add in the scale value if the
+            # diffuse forecast error covariance matrix element was singular
+            nsingular = 0
+            if kfilter.nobs_diffuse > 0:
+                d = kfilter.nobs_diffuse
+                Finf = kfilter.forecast_error_diffuse_cov
+                singular = np.diagonal(Finf).real <= kfilter.tolerance_diffuse
+                nsingular = np.sum(~singular, axis=1)
+
+            scale_obs = np.array(kfilter.scale, copy=True)
+            llf_obs += -0.5 * (
+                (self.k_endog - nmissing - nsingular) * np.log(scale) +
+                scale_obs / scale)
+
+        # Set any burned observations to have zero likelihood
         llf_obs[:loglikelihood_burn] = 0
 
         return llf_obs
@@ -948,9 +1059,27 @@ class KalmanFilter(Representation):
                 raise ValueError('Invalid shape of provided initial state'
                                  ' vector. Required (%d, 1)' % self.k_states)
         elif self.initialization == 'known':
-            initial_state = self._initial_state
-        elif self.initialization in ['approximate_diffuse', 'stationary']:
+            initial_state = np.random.multivariate_normal(
+                self._initial_state, self._initial_state_cov)
+        elif self.initialization == 'stationary':
+            from scipy.linalg import solve_discrete_lyapunov
+            # (I - T)^{-1} c = x => (I - T) x = c
+            initial_state_mean = np.linalg.solve(
+                np.eye(self.k_states) - self['transition', :, :, 0],
+                self['state_intercept', :, 0])
+            R = self['selection', :, :, 0]
+            Q = self['state_cov', :, :, 0]
+            selected_state_cov = R.dot(Q).dot(R.T)
+            initial_state_cov = solve_discrete_lyapunov(
+                self['transition', :, :, 0], selected_state_cov)
+            initial_state = np.random.multivariate_normal(
+                initial_state_mean, initial_state_cov)
+        elif self.initialization == 'approximate_diffuse':
             initial_state = np.zeros(self.k_states)
+        elif self.initialization is not None:
+            out = self.initialization(model=self)
+            initial_state = out[0] + np.random.multivariate_normal(
+                np.zeros_like(out[0]), out[2])
         else:
             initial_state = np.zeros(self.k_states)
 
@@ -1088,7 +1217,13 @@ class KalmanFilter(Representation):
             impulse = np.dot(state_chol, impulse)
 
         # If we have a time-invariant system, we can solve for the IRF directly
-        if self.time_invariant:
+        # Note that it doesn't matter if we have time-invariant intercepts,
+        # since those don't affect the IRF anyway
+        time_invariant = (
+            self._design.shape[2] == self._obs_cov.shape[2] ==
+            self._transition.shape[2] == self._selection.shape[2] ==
+            self._state_cov.shape[2])
+        if time_invariant:
             # Get the state space matrices
             design = self.design[:, :, 0]
             transition = self.transition[:, :, 0]
@@ -1134,8 +1269,8 @@ class KalmanFilter(Representation):
                 else:
                     mat = np.asarray(kwargs[name])
                     validate_matrix_shape(name, mat.shape, shape[0],
-                                          shape[1], nforecast)
-                    if mat.ndim < 3 or not mat.shape[2] == nforecast:
+                                          shape[1], steps)
+                    if mat.ndim < 3 or not mat.shape[2] == steps:
                         raise ValueError(exception % name)
                     representation[name] = np.c_[representation[name], mat]
 
@@ -1149,8 +1284,8 @@ class KalmanFilter(Representation):
                 'loglikelihood_burn': self.loglikelihood_burn
             }
             model_kwargs.update(representation)
-            model = KalmanFilter(np.zeros(self.endog.T.shape), self.k_states,
-                                 self.k_posdef, **model_kwargs)
+            model = self.__class__(np.zeros(self.endog.T.shape), self.k_states,
+                                   self.k_posdef, **model_kwargs)
             model.initialize_approximate_diffuse()
             model._initialize_filter()
             model._initialize_state()
@@ -1188,6 +1323,8 @@ class FilterResults(FrozenRepresentation):
     ----------
     nobs : int
         Number of observations.
+    nobs_diffuse : int
+        Number of observations under the diffuse Kalman filter.
     k_endog : int
         The dimension of the observation series.
     k_states : int
@@ -1236,6 +1373,8 @@ class FilterResults(FrozenRepresentation):
         The state vector used to initialize the Kalamn filter.
     initial_state_cov : array_like
         The state covariance matrix used to initialize the Kalamn filter.
+    initial_diffuse_state_cov : array_like
+        Diffuse state covariance matrix used to initialize the Kalamn filter.
     filter_method : int
         Bitmask representing the Kalman filtering method
     inversion_method : int
@@ -1267,6 +1406,10 @@ class FilterResults(FrozenRepresentation):
         The predicted state vector at each time period.
     predicted_state_cov : array
         The predicted state covariance matrix at each time period.
+    forecast_error_diffuse_cov : array
+        Diffuse forecast error covariance matrix at each time period.
+    predicted_diffuse_state_cov : array
+        The predicted diffuse state covariance matrix at each time period.
     kalman_gain : array
         The Kalman gain at each time period.
     forecasts : array
@@ -1283,10 +1426,11 @@ class FilterResults(FrozenRepresentation):
         'conserve_memory', 'filter_timing', 'tolerance', 'loglikelihood_burn',
         'converged', 'period_converged', 'filtered_state',
         'filtered_state_cov', 'predicted_state', 'predicted_state_cov',
+        'forecasts_error_diffuse_cov', 'predicted_diffuse_state_cov',
         'tmp1', 'tmp2', 'tmp3', 'tmp4', 'forecasts',
         'forecasts_error', 'forecasts_error_cov', 'llf_obs',
         'collapsed_forecasts', 'collapsed_forecasts_error',
-        'collapsed_forecasts_error_cov',
+        'collapsed_forecasts_error_cov', 'scale'
     ]
 
     _filter_options = (
@@ -1332,7 +1476,7 @@ class FilterResults(FrozenRepresentation):
 
         Parameters
         ----------
-        kalman_filter : KalmanFilter
+        kalman_filter : statespace.kalman_filter.KalmanFilter
             The model object from which to take the updated values.
 
         Notes
@@ -1373,10 +1517,8 @@ class FilterResults(FrozenRepresentation):
 
         # Reset caches
         has_missing = np.sum(self.nmissing) > 0
-        if not self._compatibility_mode and not (self.memory_no_std_forecast or
-                                                 self.invert_lu or
-                                                 self.solve_lu or
-                                                 self.filter_collapsed):
+        if not (self.memory_no_std_forecast or self.invert_lu or
+                self.solve_lu or self.filter_collapsed):
             if has_missing:
                 self._standardized_forecasts_error = np.array(
                     reorder_missing_vector(
@@ -1388,35 +1530,34 @@ class FilterResults(FrozenRepresentation):
         else:
             self._standardized_forecasts_error = None
 
-        if not self._compatibility_mode:
-            # In the partially missing data case, all entries will
-            # be in the upper left submatrix rather than the correct placement
-            # Re-ordering does not make sense in the collapsed case.
-            if has_missing and (not self.memory_no_gain and
-                                not self.filter_collapsed):
-                self._kalman_gain = np.array(reorder_missing_matrix(
-                    kalman_filter.kalman_gain, self.missing, reorder_cols=True,
-                    prefix=self.prefix))
-                self.tmp1 = np.array(reorder_missing_matrix(
-                    kalman_filter.tmp1, self.missing, reorder_cols=True,
-                    prefix=self.prefix))
-                self.tmp2 = np.array(reorder_missing_vector(
-                    kalman_filter.tmp2, self.missing, prefix=self.prefix))
-                self.tmp3 = np.array(reorder_missing_matrix(
-                    kalman_filter.tmp3, self.missing, reorder_rows=True,
-                    prefix=self.prefix))
-                self.tmp4 = np.array(reorder_missing_matrix(
-                    kalman_filter.tmp4, self.missing, reorder_cols=True,
-                    reorder_rows=True, prefix=self.prefix))
-            else:
-                self._kalman_gain = np.array(
-                    kalman_filter.kalman_gain, copy=True)
-                self.tmp1 = np.array(kalman_filter.tmp1, copy=True)
-                self.tmp2 = np.array(kalman_filter.tmp2, copy=True)
-                self.tmp3 = np.array(kalman_filter.tmp3, copy=True)
-                self.tmp4 = np.array(kalman_filter.tmp4, copy=True)
+        # In the partially missing data case, all entries will
+        # be in the upper left submatrix rather than the correct placement
+        # Re-ordering does not make sense in the collapsed case.
+        if has_missing and (not self.memory_no_gain and
+                            not self.filter_collapsed):
+            self._kalman_gain = np.array(reorder_missing_matrix(
+                kalman_filter.kalman_gain, self.missing, reorder_cols=True,
+                prefix=self.prefix))
+            self.tmp1 = np.array(reorder_missing_matrix(
+                kalman_filter.tmp1, self.missing, reorder_cols=True,
+                prefix=self.prefix))
+            self.tmp2 = np.array(reorder_missing_vector(
+                kalman_filter.tmp2, self.missing, prefix=self.prefix))
+            self.tmp3 = np.array(reorder_missing_matrix(
+                kalman_filter.tmp3, self.missing, reorder_rows=True,
+                prefix=self.prefix))
+            self.tmp4 = np.array(reorder_missing_matrix(
+                kalman_filter.tmp4, self.missing, reorder_cols=True,
+                reorder_rows=True, prefix=self.prefix))
         else:
-            self._kalman_gain = None
+            self._kalman_gain = np.array(
+                kalman_filter.kalman_gain, copy=True)
+            self.tmp1 = np.array(kalman_filter.tmp1, copy=True)
+            self.tmp2 = np.array(kalman_filter.tmp2, copy=True)
+            self.tmp3 = np.array(kalman_filter.tmp3, copy=True)
+            self.tmp4 = np.array(kalman_filter.tmp4, copy=True)
+            self.M = np.array(kalman_filter.M, copy=True)
+            self.M_diffuse = np.array(kalman_filter.M_inf, copy=True)
 
         # Note: use forecasts rather than forecast, so as not to interfer
         # with the `forecast` methods in subclasses
@@ -1428,6 +1569,26 @@ class FilterResults(FrozenRepresentation):
             kalman_filter.forecast_error_cov, copy=True
         )
         self.llf_obs = np.array(kalman_filter.loglikelihood, copy=True)
+
+        # Diffuse objects
+        self.nobs_diffuse = kalman_filter.nobs_diffuse
+        self.initial_diffuse_state_cov = None
+        self.forecasts_error_diffuse_cov = None
+        self.predicted_diffuse_state_cov = None
+        if self.nobs_diffuse > 0:
+            self.initial_diffuse_state_cov = np.array(
+                kalman_filter.model.initial_diffuse_state_cov, copy=True)
+            self.predicted_diffuse_state_cov = np.array(
+                    kalman_filter.predicted_diffuse_state_cov, copy=True)
+            if has_missing and not self.filter_collapsed:
+                self.forecasts_error_diffuse_cov = np.array(
+                    reorder_missing_matrix(
+                        kalman_filter.forecast_error_diffuse_cov,
+                        self.missing, reorder_cols=True, reorder_rows=True,
+                        prefix=self.prefix))
+            else:
+                self.forecasts_error_diffuse_cov = np.array(
+                    kalman_filter.forecast_error_diffuse_cov, copy=True)
 
         # If there was missing data, save the original values from the Kalman
         # filter output, since below will set the values corresponding to
@@ -1506,6 +1667,11 @@ class FilterResults(FrozenRepresentation):
                     self.forecasts_error[:, t] = np.nan
                     self.forecasts_error[mask, t] = (
                         self.endog[mask, t] - self.forecasts[mask, t])
+                    # TODO: We should only fill in the non-masked elements of
+                    # this array. Also, this will give the multivariate version
+                    # even if univariate filtering was selected. Instead, we
+                    # should use the reordering methods and then replace the
+                    # masked values with NaNs
                     self.forecasts_error_cov[:, :, t] = np.dot(
                         np.dot(self.design[:, :, design_t],
                                self.predicted_state_cov[:, :, t]),
@@ -1528,6 +1694,74 @@ class FilterResults(FrozenRepresentation):
                                self.predicted_state_cov[:, :, t]),
                         self.design[:, :, design_t].T
                     ) + self.obs_cov[:, :, obs_cov_t]
+
+        # Note: if we concentrated out the scale, need to adjust the
+        # loglikelihood values and all of the covariance matrices and the
+        # values that depend on the covariance matrices
+        # Note: concentrated computation is not permitted with collapsed
+        # version, so we do not need to modify collapsed arrays.
+        self.scale = 1.
+        if self.filter_concentrated and self.model._scale is None:
+            d = max(self.loglikelihood_burn, self.nobs_diffuse)
+            # Compute the scale
+            nmissing = np.array(kalman_filter.model.nmissing)
+            nobs_k_endog = np.sum(self.k_endog - nmissing[d:])
+
+            # In the univariate case, we need to subtract observations
+            # associated with a singular forecast error covariance matrix
+            nobs_k_endog -= kalman_filter.nobs_kendog_univariate_singular
+
+            scale_obs = np.array(kalman_filter.scale, copy=True)
+            self.scale = np.sum(scale_obs[d:]) / nobs_k_endog
+
+            # Need to modify this for diffuse initialization, since for
+            # diffuse periods we only need to add in the scale value if the
+            # diffuse forecast error covariance matrix element was singular
+            nsingular = 0
+            if kalman_filter.nobs_diffuse > 0:
+                d = kalman_filter.nobs_diffuse
+                Finf = kalman_filter.forecast_error_diffuse_cov
+                singular = (np.diagonal(Finf).real <=
+                            kalman_filter.tolerance_diffuse)
+                nsingular = np.sum(~singular, axis=1)
+
+            # Adjust the loglikelihood obs (see `KalmanFilter.loglikeobs` for
+            # defaults on the adjustment)
+            self.llf_obs += -0.5 * (
+                (self.k_endog - nmissing - nsingular) * np.log(self.scale) +
+                scale_obs / self.scale)
+
+            # Scale the filter output
+            self.obs_cov = self.obs_cov * self.scale
+            self.state_cov = self.state_cov * self.scale
+
+            self.initial_state_cov = self.initial_state_cov * self.scale
+            self.predicted_state_cov = self.predicted_state_cov * self.scale
+            self.filtered_state_cov = self.filtered_state_cov * self.scale
+            self.forecasts_error_cov = self.forecasts_error_cov * self.scale
+            if self.missing_forecasts_error_cov is not None:
+                self.missing_forecasts_error_cov = (
+                    self.missing_forecasts_error_cov * self.scale)
+
+            # Note: do not have to adjust the Kalman gain or tmp4
+            self.tmp1 = self.tmp1 * self.scale
+            self.tmp2 = self.tmp2 / self.scale
+            self.tmp3 = self.tmp3 / self.scale
+            if not (self.memory_no_std_forecast or
+                    self.invert_lu or
+                    self.solve_lu or
+                    self.filter_collapsed):
+                self._standardized_forecasts_error = (
+                    self._standardized_forecasts_error / self.scale**0.5)
+        # The self.model._scale value is only not None within a fixed_scale
+        # context, in which case it is set and indicates that we should
+        # generally view this results object as using a concentrated scale
+        # (e.g. for d.o.f. computations), but because the fixed scale was
+        # actually applied to the model prior to filtering, we do not need to
+        # make any adjustments to the filter output, etc.
+        elif self.model._scale is not None:
+            self.filter_concentrated = True
+            self.scale = self.model._scale
 
     @property
     def kalman_gain(self):
@@ -1559,7 +1793,6 @@ class FilterResults(FrozenRepresentation):
                     )
                 else:
                     mask = ~self.missing[:, t].astype(bool)
-                    n = self.k_endog - self.nmissing[t]
                     F = self.forecasts_error_cov[np.ix_(mask, mask, [t])]
                     self._kalman_gain[:, mask, t] = np.dot(
                         np.dot(
@@ -1654,7 +1887,7 @@ class FilterResults(FrozenRepresentation):
 
         Returns
         -------
-        results : PredictionResults
+        results : kalman_filter.PredictionResults
             A PredictionResults object.
 
         Notes
@@ -1802,9 +2035,16 @@ class FilterResults(FrozenRepresentation):
             endog.fill(np.nan)
             endog = np.asfortranarray(np.c_[self.endog[:, :nstatic], endog])
 
+            # Do not propagate through FILTER_CONCENTRATED, because we want
+            # to perform prediction based on the estimated values, and one of
+            # the estimated values is the scale (and in any case, the
+            # obs_cov and state_cov have been updated to reflect the scale
+            # estimate already)
+            filter_method = self.filter_method & ~FILTER_CONCENTRATED
+
             # Setup the new statespace representation
             model_kwargs = {
-                'filter_method': self.filter_method,
+                'filter_method': filter_method,
                 'inversion_method': self.inversion_method,
                 'stability_method': self.stability_method,
                 'conserve_memory': self.conserve_memory,
@@ -1813,13 +2053,10 @@ class FilterResults(FrozenRepresentation):
                 'loglikelihood_burn': self.loglikelihood_burn
             }
             model_kwargs.update(representation)
-            model = KalmanFilter(
+            model = self.model.__class__(
                 endog, self.k_states, self.k_posdef, **model_kwargs
             )
-            model.initialize_known(
-                self.initial_state,
-                self.initial_state_cov
-            )
+            model.initialization = self.initialization
             model._initialize_filter()
             model._initialize_state()
 
@@ -1839,8 +2076,6 @@ class FilterResults(FrozenRepresentation):
         # Kalman filter will be operating) so that we can replace actual data
         # with predicted data during dynamic forecasting
         endog = model._representations[model.prefix]['obs']
-
-        # print(nstatic, ndynamic, nforecast, model.nobs)
 
         for t in range(kfilter.model.nobs):
             # Run the Kalman filter for the first `nstatic` periods (for
@@ -1973,8 +2208,6 @@ class PredictionResults(FilterResults):
     ]
 
     def __init__(self, results, start, end, nstatic, ndynamic, nforecast):
-        from scipy import stats
-
         # Save the filter results object
         self.results = results
 

@@ -17,7 +17,7 @@ Examples
 
     # Load modules and data
     import statsmodels.api as sm
-    data = sm.datasets.stackloss.load()
+    data = sm.datasets.stackloss.load(as_pandas=False)
     data.exog = sm.add_constant(data.exog)
 
     # Fit model and print summary
@@ -48,9 +48,12 @@ References
 Module Reference
 ----------------
 
+.. module:: statsmodels.robust
+
 Model Classes
 ^^^^^^^^^^^^^
 
+.. module:: statsmodels.robust.robust_linear_model
 .. currentmodule:: statsmodels.robust.robust_linear_model
 
 .. autosummary::
@@ -71,6 +74,7 @@ Model Results
 Norms
 ^^^^^
 
+.. module:: statsmodels.robust.norms
 .. currentmodule:: statsmodels.robust.norms
 
 .. autosummary::
@@ -90,6 +94,7 @@ Norms
 Scale
 ^^^^^
 
+.. module:: statsmodels.robust.scale
 .. currentmodule:: statsmodels.robust.scale
 
 .. autosummary::
@@ -98,7 +103,4 @@ Scale
     Huber
     HuberScale
     mad
-    huber
     hubers_scale
-    stand_mad
-

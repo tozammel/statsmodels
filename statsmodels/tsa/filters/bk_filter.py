@@ -4,6 +4,7 @@ import numpy as np
 from scipy.signal import fftconvolve
 from ._utils import _maybe_get_pandas_wrapper
 
+
 def bkfilter(X, low=6, high=32, K=12):
     """
     Baxter-King bandpass filter
@@ -52,7 +53,7 @@ def bkfilter(X, low=6, high=32, K=12):
     >>> import statsmodels.api as sm
     >>> import pandas as pd
     >>> dta = sm.datasets.macrodata.load_pandas().data
-    >>> index = pd.DatetimeIndex(start='1959Q1', end='2009Q3', freq='Q')
+    >>> index = pd.DatetimeIndex(start='1959Q1', end='2009Q4', freq='Q')
     >>> dta.set_index(index, inplace=True)
 
     >>> cycles = sm.tsa.filters.bkfilter(dta[['realinv']], 6, 24, 12)
@@ -87,8 +88,8 @@ def bkfilter(X, low=6, high=32, K=12):
     bweights -= bweights.mean() # make sure weights sum to zero
     if X.ndim == 2:
         bweights = bweights[:,None]
-    X = fftconvolve(X, bweights, mode='valid') # get a centered moving avg/
-                                               # convolution
+    X = fftconvolve(X, bweights, mode='valid')
+    # get a centered moving avg/convolution
     if _pandas_wrapper is not None:
         return _pandas_wrapper(X)
 

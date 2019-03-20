@@ -10,9 +10,7 @@ from statsmodels.tsa.filters.api import (bkfilter, hpfilter, cffilter,
 
 
 def test_bking1d():
-    """
-    Test Baxter King band-pass filter. Results are taken from Stata
-    """
+    # Test Baxter King band-pass filter. Results are taken from Stata
     bking_results = array([7.320813, 2.886914, -6.818976, -13.49436,
                 -13.27936, -9.405913, -5.691091, -5.133076, -7.273468,
                 -9.243364, -8.482916, -4.447764, 2.406559, 10.68433,
@@ -49,14 +47,13 @@ def test_bking1d():
                 -92.98669, -51.91707, -.7313812, 43.22938, 64.62762, 64.07226,
                 59.35707, 67.06026, 91.87247, 124.4591, 151.2402, 163.0648,
                 154.6432])
-    X = macrodata.load().data['realinv']
+    X = macrodata.load_pandas().data['realinv'].values
     Y = bkfilter(X, 6, 32, 12)
     assert_almost_equal(Y,bking_results,4)
 
+
 def test_bking2d():
-    """
-    Test Baxter-King band-pass filter with 2d input
-    """
+    # Test Baxter-King band-pass filter with 2d input
     bking_results = array([[7.320813,-.0374475], [2.886914,-.0430094],
         [-6.818976,-.053456], [-13.49436,-.0620739], [-13.27936,-.0626929],
         [-9.405913,-.0603022], [-5.691091,-.0630016], [-5.133076,-.0832268],
@@ -118,14 +115,13 @@ def test_bking2d():
         [67.06026,-.1766731], [91.87247,.3898467], [124.4591,.8135461],
         [151.2402,.9644226], [163.0648,.6865934], [154.6432,.0115685]])
 
-    X = macrodata.load().data[['realinv','cpi']].view((float,2))
+    X = macrodata.load_pandas().data[['realinv','cpi']].values.astype(np.float)
     Y = bkfilter(X, 6, 32, 12)
     assert_almost_equal(Y,bking_results,4)
 
+
 def test_hpfilter():
-    """
-    Test Hodrick-Prescott Filter. Results taken from Stata.
-    """
+    # Test Hodrick-Prescott Filter. Results taken from Stata.
     hpfilt_res = array([[3.951191484487844718e+01,2.670837085155121713e+03],
         [8.008853245681075350e+01,2.698712467543189177e+03],
         [4.887545512195401898e+01,2.726612544878045810e+03],
@@ -329,15 +325,14 @@ def test_hpfilter():
         [-3.490477058718843182e+02,1.327445770587188417e+04],
         [-3.975570728533530200e+02,1.329906107285335383e+04],
         [-3.331152428080622485e+02,1.332345624280806260e+04]])
-    dta = macrodata.load().data['realgdp']
+    dta = macrodata.load_pandas().data['realgdp'].values
     res = column_stack((hpfilter(dta,1600)))
     assert_almost_equal(res,hpfilt_res,6)
 
+
 def test_cfitz_filter():
-    """
-    Test Christiano-Fitzgerald Filter. Results taken from R.
-    """
-    #NOTE: The Stata mata code and the matlab code it's based on are wrong.
+    # Test Christiano-Fitzgerald Filter. Results taken from R.
+    # NOTE: The Stata mata code and the matlab code it's based on are wrong.
     cfilt_res = array([[0.712599537179426,0.439563468233128],
                         [1.06824041304411,0.352886666575907],
                         [1.19422467791128,0.257297004260607],
@@ -540,12 +535,13 @@ def test_cfitz_filter():
                         [-1.59657420180451,-4.18499132634584],
                         [-1.45489013276495,-1.81759097305637],
                         [-1.21309542313047,0.722029457352468]])
-    dta = macrodata.load().data[['tbilrate','infl']].view((float,2))[1:]
+    dta = macrodata.load_pandas().data[['tbilrate','infl']].values[1:]
     cyc, trend = cffilter(dta)
     assert_almost_equal(cyc, cfilt_res, 8)
     #do 1d
     cyc, trend = cffilter(dta[:,1])
     assert_almost_equal(cyc, cfilt_res[:,1], 8)
+
 
 def test_bking_pandas():
     # 1d
@@ -567,6 +563,7 @@ def test_bking_pandas():
     assert_equal(filtered.index[-1], datetime(2006, 9, 30))
     assert_equal(filtered.columns.values, ["infl", "unemp"])
 
+
 def test_cfitz_pandas():
     # 1d
     dta = macrodata.load_pandas().data
@@ -587,6 +584,7 @@ def test_cfitz_pandas():
     assert_equal(cycle.index[-1], datetime(2009, 9, 30))
     assert_equal(cycle.columns.values, ["infl", "unemp"])
 
+
 def test_hpfilter_pandas():
     dta = macrodata.load_pandas().data
     index = DatetimeIndex(start='1959-01-01', end='2009-10-01', freq='Q')
@@ -601,7 +599,7 @@ def test_hpfilter_pandas():
 
 class TestFilters(object):
     @classmethod
-    def setupClass(cls):
+    def setup_class(cls):
         # even
         data = [-50, 175, 149, 214, 247, 237, 225, 329, 729, 809,
                 530, 489, 540, 457, 195, 176, 337, 239, 128, 102,
@@ -734,8 +732,3 @@ class TestFilters(object):
         np.testing.assert_almost_equal(res.values.squeeze(), expected, 4)
         np.testing.assert_(res.index[0] == start)
         np.testing.assert_(res.index[-1] == end)
-
-
-if __name__ == "__main__":
-    import nose
-    nose.runmodule(argv=[__file__, '-vvs', '-x', '--pdb'], exit=False)
